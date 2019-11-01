@@ -19,7 +19,7 @@ var connect *sql.DB
 
 func main() {
 	var err error
-	connect, err = sql.Open("clickhouse", "tcp://localhost:9001?debug=true")
+	connect, err = sql.Open("clickhouse", "tcp://localhost:9001?database=ds&debug=true")
 	sqlString := createTable()
 	_, err = execQuery(sqlString)
 	handleError(err)
@@ -30,10 +30,10 @@ func main() {
 	s := http.Server{
 		Addr:           "0.0.0.0:1234",
 		Handler:        handler,
-		ReadTimeout:    1000 * time.Second,
-		WriteTimeout:   1000 * time.Second,
-		IdleTimeout:    0 * time.Second,
-		MaxHeaderBytes: 1 << 20, //1*2^20 - 128 kByte
+		//ReadTimeout:    1000 * time.Second,
+		//WriteTimeout:   1000 * time.Second,
+		//IdleTimeout:    0 * time.Second,
+		//MaxHeaderBytes: 1 << 20, //1*2^20 - 128 kByte
 	}
 	log.Println(s.ListenAndServe())
 }
@@ -56,25 +56,32 @@ type Query struct {
 type LinuxTime int
 
 type Event struct {
-	PlayerId      string                 `json:"player_id"`
-	PlayerName    string                 `json:"player_name"`
-	EventType     string                 `json:"event_type"`
-	SessionUid    string                 `json:"session_uid"`
-	DateTime      LinuxTime              `json:"date_time"`
-	Registered    LinuxTime              `json:"registered"`
-	Level         int                    `json:"level"`
-	ExpCount      int                    `json:"exp_count"`
-	SessionNum    int                    `json:"session_num"`
-	SoftBalance   int                    `json:"soft_balance"`
-	HardBalance   int                    `json:"hard_balance"`
-	ShardsBalance int                    `json:"shards_balance"`
-	EventData     map[string]interface{} `json:"event_data"`
+	PlayerId              string                 `json:"player_id"`
+	PlayerName            string                 `json:"player_name"`
+	EventType             string                 `json:"event_type"`
+	SessionUid            string                 `json:"session_uid"`
+	DateTime              LinuxTime              `json:"date_time"`
+	Registered            LinuxTime              `json:"registered"`
+	Level                 int                    `json:"level"`
+	ExpCount              int                    `json:"exp_count"`
+	SessionNum            int                    `json:"session_num"`
+	SoftBalance           int                    `json:"soft_balance"`
+	HardBalance           int                    `json:"hard_balance"`
+	ShardsBalance         int                    `json:"shards_balance"`
+	IsDeveloper           int                    `json:"is_developer"`
+	AppVersion            string                 `json:"app_version"`
+	MusicShardsBalance    int                    `json:"music_shards_balance"`
+	DanceValleyBalance    int                    `json:"dance_valley_balance"`
+	SocialHubBalance      int                    `json:"social_hub_balance"`
+	BlueEnergyBalance     int                    `json:"blue_energy_balance"`
+	PurpleEnergyBalance   int                    `json:"purple_energy_balance"`
+	EventData             map[string]interface{} `json:"event_data"`
 }
 
 func createTable() string {
 	println(clickhouse.DefaultConnTimeout)
 	event := Event{}
-	tableName := "event"
+	tableName := "ds_event"
 	e := reflect.ValueOf(&event).Elem()
 	var sql bytes.Buffer
 	sql.WriteString("CREATE TABLE IF NOT EXISTS ")
@@ -114,7 +121,7 @@ func insertEvent(event Event) (string, error) {
 	var sqlString bytes.Buffer
 	var valuesPlaceholder bytes.Buffer
 	var values []interface{}
-	sqlString.WriteString("INSERT INTO event (")
+	sqlString.WriteString("INSERT INTO ds_event (")
 	valuesPlaceholder.WriteString(" VALUES (")
 
 	for i := 0; i < e.NumField(); i++ {
