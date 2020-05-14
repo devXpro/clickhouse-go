@@ -19,7 +19,7 @@ var connect *sql.DB
 
 func main() {
 	var err error
-	connect, err = sql.Open("clickhouse", "tcp://localhost:9001?debug=true")
+	connect, err = sql.Open("clickhouse", "tcp://localhost:9001?database=ds&debug=true")
 	sqlString := createTable()
 	_, err = execQuery(sqlString)
 	handleError(err)
@@ -30,10 +30,10 @@ func main() {
 	s := http.Server{
 		Addr:           "0.0.0.0:1234",
 		Handler:        handler,
-		ReadTimeout:    1000 * time.Second,
-		WriteTimeout:   1000 * time.Second,
-		IdleTimeout:    0 * time.Second,
-		MaxHeaderBytes: 1 << 20, //1*2^20 - 128 kByte
+		//ReadTimeout:    1000 * time.Second,
+		//WriteTimeout:   1000 * time.Second,
+		//IdleTimeout:    0 * time.Second,
+		//MaxHeaderBytes: 1 << 20, //1*2^20 - 128 kByte
 	}
 	log.Println(s.ListenAndServe())
 }
@@ -74,7 +74,7 @@ type Event struct {
 func createTable() string {
 	println(clickhouse.DefaultConnTimeout)
 	event := Event{}
-	tableName := "event"
+	tableName := "ds_event"
 	e := reflect.ValueOf(&event).Elem()
 	var sql bytes.Buffer
 	sql.WriteString("CREATE TABLE IF NOT EXISTS ")
@@ -114,7 +114,7 @@ func insertEvent(event Event) (string, error) {
 	var sqlString bytes.Buffer
 	var valuesPlaceholder bytes.Buffer
 	var values []interface{}
-	sqlString.WriteString("INSERT INTO event (")
+	sqlString.WriteString("INSERT INTO ds_event (")
 	valuesPlaceholder.WriteString(" VALUES (")
 
 	for i := 0; i < e.NumField(); i++ {

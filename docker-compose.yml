@@ -1,0 +1,94 @@
+version: "3.7"
+services:
+  clickhouse-server:
+    container_name: clickhouse-server
+    image: yandex/clickhouse-server
+#    ports:
+#      - "9001:9000"
+#      - "9000:9000"
+#      - "8123:8123"
+    volumes:
+#      - /etc/localtime:/etc/localtime
+#      - /etc/timezone:/etc/timezone
+      - .docker/data/clickhouse_database:/var/lib/clickhouse
+    tmpfs:
+      - /tmp
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    restart: always
+
+  postgres:
+    container_name: postgres
+    image: postgres:9.5-alpine
+#    ports:
+#      - "0901:5432"
+    env_file: .docker/redash/env
+    volumes:
+      - .docker/data/redash/postgres-data:/var/lib/postgresql/data
+    restart: always
+  redis:
+    container_name: redis
+    image: redis:5.0-alpine
+    restart: always
+
+  server:
+    container_name: server
+    image: redash/redash
+    depends_on:
+      - postgres
+      - redis
+    env_file: .docker/redash/env
+    restart: always
+    command: server
+#    ports:
+#      - "80:5000"
+    environment:
+      REDASH_WEB_WORKERS: 4
+  scheduler:
+    container_name: scheduler
+    image: redash/redash
+    depends_on:
+      - postgres
+      - redis
+    env_file: .docker/redash/env
+    restart: always
+    command: scheduler
+    environment:
+      QUEUES: "celery"
+      WORKERS_COUNT: 1
+  scheduled_worker:
+    container_name: scheduled_worker
+    image: redash/redash
+    depends_on:
+      - postgres
+      - redis
+    env_file: .docker/redash/env
+    restart: always
+    command: worker
+    environment:
+      QUEUES: "scheduled_queries,schemas"
+      WORKERS_COUNT: 1
+  adhoc_worker:
+    container_name: adhoc_worker
+    image: redash/redash
+    depends_on:
+      - postgres
+      - redis
+    env_file: .docker/redash/env
+    restart: always
+    command: worker
+    environment:
+      QUEUES: "queries"
+      WORKERS_COUNT: 2
+  nginx:
+    container_name: nginx
+    image: redash/nginx:latest
+    ports:
+      - "9390:80"
+    depends_on:
+      - server
+    links:
+      - server:redash
+    restart: always
