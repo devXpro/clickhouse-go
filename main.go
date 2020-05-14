@@ -56,19 +56,26 @@ type Query struct {
 type LinuxTime int
 
 type Event struct {
-	PlayerId      string                 `json:"player_id"`
-	PlayerName    string                 `json:"player_name"`
-	EventType     string                 `json:"event_type"`
-	SessionUid    string                 `json:"session_uid"`
-	DateTime      LinuxTime              `json:"date_time"`
-	Registered    LinuxTime              `json:"registered"`
-	Level         int                    `json:"level"`
-	ExpCount      int                    `json:"exp_count"`
-	SessionNum    int                    `json:"session_num"`
-	SoftBalance   int                    `json:"soft_balance"`
-	HardBalance   int                    `json:"hard_balance"`
-	ShardsBalance int                    `json:"shards_balance"`
-	EventData     map[string]interface{} `json:"event_data"`
+	PlayerId              string                 `json:"player_id"`
+	PlayerName            string                 `json:"player_name"`
+	EventType             string                 `json:"event_type"`
+	SessionUid            string                 `json:"session_uid"`
+	DateTime              LinuxTime              `json:"date_time"`
+	Registered            LinuxTime              `json:"registered"`
+	Level                 int                    `json:"level"`
+	ExpCount              int                    `json:"exp_count"`
+	SessionNum            int                    `json:"session_num"`
+	SoftBalance           int                    `json:"soft_balance"`
+	HardBalance           int                    `json:"hard_balance"`
+	ShardsBalance         int                    `json:"shards_balance"`
+	IsDeveloper           int                    `json:"is_developer"`
+	AppVersion            string                 `json:"app_version"`
+	MusicShardsBalance    int                    `json:"music_shards_balance"`
+	DanceValleyBalance    int                    `json:"dance_valley_balance"`
+	SocialHubBalance      int                    `json:"social_hub_balance"`
+	BlueEnergyBalance     int                    `json:"blue_energy_balance"`
+	PurpleEnergyBalance   int                    `json:"purple_energy_balance"`
+	EventData             map[string]interface{} `json:"event_data"`
 }
 
 func createTable() string {
