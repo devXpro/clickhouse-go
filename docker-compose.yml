@@ -11,6 +11,8 @@ services:
 #      - /etc/localtime:/etc/localtime
 #      - /etc/timezone:/etc/timezone
       - .docker/data/clickhouse_database:/var/lib/clickhouse
+      - .docker/clickhouse/users.xml:/etc/clickhouse-server/users.xml
+      - .docker/clickhouse/config.xml:/etc/clickhouse-server/config.xml
     tmpfs:
       - /tmp
     ulimits:
