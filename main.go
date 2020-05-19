@@ -2,34 +2,73 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/gorilla/mux"
 	"github.com/iancoleman/strcase"
 	"github.com/kshvakov/clickhouse"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"reflect"
+	"sort"
 	"time"
 )
 
-var connect *sql.DB
+var sqlConnect *sql.DB
+var mongoConnect *mongo.Client
+var games []string
+
+const MONGO_HOST = "mongodb://mongodb:27017"
+const CLICKHOUSE_HOST = "tcp://clickhouse-server:9000?database=redash&debug=true"
+
+func initDB() {
+	// Set client options
+	clientOptions := options.Client().ApplyURI(fmt.Sprintf("%s", MONGO_HOST))
+	// Connect to MongoDB
+	var err error
+	mongoConnect, err = mongo.Connect(context.Background(), clientOptions)
+	handleError(err)
+	//Check the connection
+	err = mongoConnect.Ping(context.Background(), nil)
+	handleError(err)
+
+	fmt.Println(fmt.Sprintf("Connected to MongoDB on %s!", MONGO_HOST))
+	sqlConnect, err = sql.Open("clickhouse", CLICKHOUSE_HOST)
+	handleError(err)
+	fmt.Println(fmt.Sprintf("Connected to ClickHouse on %s!", CLICKHOUSE_HOST))
+}
+
+func initTableAndCollection(name string) {
+	if !contains(games, name) {
+		_, err := execQuery(createTable(name))
+		createCollection(name)
+		handleError(err)
+		games = append(games, name)
+	}
+}
+
+func contains(s []string, searchterm string) bool {
+	i := sort.SearchStrings(s, searchterm)
+	return i < len(s) && s[i] == searchterm
+}
 
 func main() {
-	var err error
-	connect, err = sql.Open("clickhouse", "tcp://localhost:9001?database=ds&debug=true")
-	sqlString := createTable()
-	_, err = execQuery(sqlString)
-	handleError(err)
-	handler := http.NewServeMux()
+	initDB()
+
+	handler := mux.NewRouter()
+	handler.HandleFunc("/addEvent/{game}", Logger(addEvent))
 	handler.HandleFunc("/query", Logger(selectQuery))
-	handler.HandleFunc("/addEvent", Logger(addEvent))
 	handler.HandleFunc("/", welcomePage)
 	s := http.Server{
-		Addr:           "0.0.0.0:1234",
-		Handler:        handler,
+		Addr:    "0.0.0.0:1234",
+		Handler: handler,
 		//ReadTimeout:    1000 * time.Second,
 		//WriteTimeout:   1000 * time.Second,
 		//IdleTimeout:    0 * time.Second,
@@ -56,36 +95,50 @@ type Query struct {
 type LinuxTime int
 
 type Event struct {
-	PlayerId              string                 `json:"player_id"`
-	PlayerName            string                 `json:"player_name"`
-	EventType             string                 `json:"event_type"`
-	SessionUid            string                 `json:"session_uid"`
-	DateTime              LinuxTime              `json:"date_time"`
-	Registered            LinuxTime              `json:"registered"`
-	Level                 int                    `json:"level"`
-	ExpCount              int                    `json:"exp_count"`
-	SessionNum            int                    `json:"session_num"`
-	SoftBalance           int                    `json:"soft_balance"`
-	HardBalance           int                    `json:"hard_balance"`
-	ShardsBalance         int                    `json:"shards_balance"`
-	IsDeveloper           int                    `json:"is_developer"`
-	AppVersion            string                 `json:"app_version"`
-	MusicShardsBalance    int                    `json:"music_shards_balance"`
-	DanceValleyBalance    int                    `json:"dance_valley_balance"`
-	SocialHubBalance      int                    `json:"social_hub_balance"`
-	BlueEnergyBalance     int                    `json:"blue_energy_balance"`
-	PurpleEnergyBalance   int                    `json:"purple_energy_balance"`
-	EventData             map[string]interface{} `json:"event_data"`
+	PlayerId       string                 `json:"player_id"`
+	EventType      string                 `json:"event_type"`
+	EventData      map[string]interface{} `json:"event_data"`
+	PlayerMetaData map[string]interface{} `json:"player_meta_data"`
+	SessionUid     string                 `json:"session_uid"`
+	DateTime       LinuxTime              `json:"date_time"`
+	Registered     LinuxTime              `json:"registered"`
+	AppVersion     string                 `json:"app_version"`
+	PlayerLevel    int                    `json:"player_level"`
+	ExpCount       int                    `json:"exp_count"`
+	SessionNum     int                    `json:"session_num"`
+	SoftBalance    int                    `json:"soft_balance"`
+	HardBalance    int                    `json:"hard_balance"`
+	StarsBalance   int                    `json:"stars_balance"`
+	EnergyBalance  int                    `json:"energy_balance"`
+	TrafficSource  string                 `json:"traffic_source"`
+	AdCompany      string                 `json:"ad_company"`
+	AdName         string                 `json:"ad_name"`
 }
 
-func createTable() string {
+func createCollection(name string) {
+	col := mongoConnect.Database("redash").Collection(name)
+	createIndex("date_time", col)
+	createIndex("registered", col)
+}
+
+func createIndex(name string, col *mongo.Collection) {
+	mod := mongo.IndexModel{
+		Keys: bson.M{
+			name: -1, // index in ascending order
+		}, Options: nil,
+	}
+	ind, err := col.Indexes().CreateOne(context.TODO(), mod)
+	handleError(err)
+	fmt.Println("CreateOne() index:", ind)
+}
+
+func createTable(name string) string {
 	println(clickhouse.DefaultConnTimeout)
 	event := Event{}
-	tableName := "ds_event"
 	e := reflect.ValueOf(&event).Elem()
 	var sql bytes.Buffer
 	sql.WriteString("CREATE TABLE IF NOT EXISTS ")
-	sql.WriteString(tableName)
+	sql.WriteString(name)
 	sql.WriteString(" (")
 
 	for i := 0; i < e.NumField(); i++ {
@@ -105,31 +158,37 @@ func createTable() string {
 }
 
 func addEvent(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	game := vars["game"]
+	initTableAndCollection(game)
 	body, err := ioutil.ReadAll(r.Body)
 	var event Event
 	err = json.Unmarshal(body, &event)
 	var stringResult string
 
 	if err == nil {
-		stringResult, err = insertEvent(event)
+		stringResult, err = insertEvent(event, game)
 	}
 	renderResponse(err, w, stringResult)
 }
 
-func insertEvent(event Event) (string, error) {
+func insertEvent(event Event, game string) (string, error) {
 	e := reflect.ValueOf(&event).Elem()
 	var sqlString bytes.Buffer
 	var valuesPlaceholder bytes.Buffer
 	var values []interface{}
-	sqlString.WriteString("INSERT INTO ds_event (")
+	sqlString.WriteString("INSERT INTO ")
+	sqlString.WriteString(game)
+	sqlString.WriteString(" (")
 	valuesPlaceholder.WriteString(" VALUES (")
-
+	doc := bson.M{}
 	for i := 0; i < e.NumField(); i++ {
 		varName := strcase.ToSnake(e.Type().Field(i).Name)
 		varType := strcase.ToCamel(fmt.Sprintf("%v", e.Type().Field(i).Type))
-		varValue := castValueByType(varType, e.Field(i).Interface())
 
-		values = append(values, varValue)
+		doc[strcase.ToCamel(varName)] = castValueByType(varType, e.Field(i).Interface(), false)
+
+		values = append(values, castValueByType(varType, e.Field(i).Interface(), true))
 		sqlString.WriteString(varName)
 		valuesPlaceholder.WriteString("?")
 		if i != e.NumField()-1 {
@@ -140,18 +199,28 @@ func insertEvent(event Event) (string, error) {
 	sqlString.WriteString(")")
 	valuesPlaceholder.WriteString(")")
 	sqlString.WriteString(valuesPlaceholder.String())
-
+	//fmt.Println(sqlString.String())
 	var (
-		tx, _   = connect.Begin()
-		stmt, _ = tx.Prepare(sqlString.String())
+		tx, _     = sqlConnect.Begin()
+		stmt, err = tx.Prepare(sqlString.String())
 	)
 	defer stmt.Close()
-	_, err := stmt.Exec(values...)
+	handleError(err)
+	_, err = stmt.Exec(values...)
 	if err != nil {
 
 		return "", err
 	}
 	err = tx.Commit()
+
+	col := mongoConnect.Database("redash").Collection(game)
+	result, insertErr := col.InsertOne(context.TODO(), doc)
+	// Check for any insertion errors
+	if insertErr != nil {
+		fmt.Println("InsertOne ERROR:", insertErr)
+	} else {
+		fmt.Println("InsertOne() API result:", result)
+	}
 
 	return `{"status":"ok"}`, nil
 }
@@ -167,13 +236,14 @@ func typeCast(structType string) string {
 	}
 }
 
-func castValueByType(structType string, value interface{}) interface{} {
+func castValueByType(structType string, value interface{}, mapAsString bool) interface{} {
 	switch structType {
 	case "MainLinuxTime":
 		return time.Unix(int64(value.(LinuxTime)), 0)
 	case "Mapstringinterface":
-		value, _ = json.Marshal(value)
-
+		if mapAsString {
+			value, _ = json.Marshal(value)
+		}
 		return value
 	default:
 		return value
@@ -208,7 +278,7 @@ func renderResponse(err error, w http.ResponseWriter, stringResult string) {
 }
 
 func execQuery(sqlString string) (string, error) {
-	_, err := connect.Exec(sqlString)
+	_, err := sqlConnect.Exec(sqlString)
 
 	if err != nil {
 		return "", err
@@ -227,7 +297,7 @@ func Logger(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func getResultInJson(sqlString string) (string, error) {
-	rows, err := connect.Query(sqlString)
+	rows, err := sqlConnect.Query(sqlString)
 	if err != nil {
 		return "", err
 	}

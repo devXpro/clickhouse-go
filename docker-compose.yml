@@ -1,5 +1,27 @@
 version: "3.7"
 services:
+  event-tracker:
+    build: .docker/eventTracker
+    volumes:
+      - .:/app
+    ports:
+      - "9284:1234"
+    depends_on:
+      - mongodb
+      - clickhouse-server
+  mongodb:
+    image: mongo:latest
+    container_name: "mongodb"
+    environment:
+      - MONGO_DATA_DIR=/data/db
+      - MONGO_LOG_DIR=/dev/null
+#      - MONGO_INITDB_ROOT_USERNAME=root
+#      - MONGO_INITDB_ROOT_PASSWORD=bWAmd9AjyGM444cQ
+    volumes:
+      - .docker/data/mongodb:/data/db
+    ports:
+      - 37017:27017
+    command: mongod --logpath=/dev/null # --quiet
   clickhouse-server:
     container_name: clickhouse-server
     image: yandex/clickhouse-server
