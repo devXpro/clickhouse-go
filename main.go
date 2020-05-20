@@ -38,11 +38,27 @@ func initDB() {
 	//Check the connection
 	err = mongoConnect.Ping(context.Background(), nil)
 	handleError(err)
-
+	reconnectClickHouse()
 	fmt.Println(fmt.Sprintf("Connected to MongoDB on %s!", MONGO_HOST))
+
+}
+
+func reconnectClickHouse() {
+	var err error
 	sqlConnect, err = sql.Open("clickhouse", CLICKHOUSE_HOST)
 	handleError(err)
 	fmt.Println(fmt.Sprintf("Connected to ClickHouse on %s!", CLICKHOUSE_HOST))
+}
+
+func pingClickHouse() {
+	if err := sqlConnect.Ping(); err != nil {
+		if exception, ok := err.(*clickhouse.Exception); ok {
+			fmt.Printf("[%d] %s \n%s\n", exception.Code, exception.Message, exception.StackTrace)
+		} else {
+			fmt.Println(err)
+		}
+		reconnectClickHouse()
+	}
 }
 
 func initTableAndCollection(name string) {
@@ -160,6 +176,7 @@ func createTable(name string) string {
 func addEvent(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	game := vars["game"]
+	pingClickHouse()
 	initTableAndCollection(game)
 	body, err := ioutil.ReadAll(r.Body)
 	var event Event
