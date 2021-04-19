@@ -152,7 +152,7 @@ func insertEvent(event Event, game string) (string, error) {
 	// Check for any insertion errors
 	if insertErr != nil {
 		fmt.Println("InsertOne ERROR: ", insertErr)
-		return `{"error":" `+ insertErr.error +`"}`, nil
+		return `{"error":" `+ insertErr.Error() +`"}`, nil
 	} else {
 		fmt.Println("InsertOne() API result:", result)
 	}
