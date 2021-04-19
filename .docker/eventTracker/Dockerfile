@@ -14,10 +14,8 @@ WORKDIR /app
 
 RUN go get github.com/gorilla/mux
 RUN go get github.com/iancoleman/strcase
-RUN go get github.com/kshvakov/clickhouse
 RUN go get go.mongodb.org/mongo-driver/mongo
 COPY ./entrypoint.sh /opt
 
 ## Build the Go app
 CMD ["sh", "/opt/entrypoint.sh"]
-#CMD ["tail", "-f", "/dev/null"]

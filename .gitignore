@@ -1,3 +1,5 @@
 .idea
 .docker/data
 main
+.DS_Store
+/.history

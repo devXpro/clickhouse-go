@@ -8,7 +8,6 @@ services:
       - "9284:1234"
     depends_on:
       - mongodb
-      - clickhouse-server
   mongodb:
     image: mongo:latest
     container_name: "mongodb"
@@ -22,26 +21,6 @@ services:
     ports:
       - 37017:27017
     command: mongod --logpath=/dev/null # --quiet
-  clickhouse-server:
-    container_name: clickhouse-server
-    image: yandex/clickhouse-server
-#    ports:
-#      - "9001:9000"
-#      - "9000:9000"
-#      - "8123:8123"
-    volumes:
-#      - /etc/localtime:/etc/localtime
-#      - /etc/timezone:/etc/timezone
-      - .docker/data/clickhouse_database:/var/lib/clickhouse
-      - .docker/clickhouse/users.xml:/etc/clickhouse-server/users.xml
-      - .docker/clickhouse/config.xml:/etc/clickhouse-server/config.xml
-    tmpfs:
-      - /tmp
-    ulimits:
-      nofile:
-        soft: 262144
-        hard: 262144
-    restart: always
 
   postgres:
     container_name: postgres
